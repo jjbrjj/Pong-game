@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game - Speel Online</title>
+    <meta name="description" content="Speel de klassieke Pong arcade game online. Twee spelers kunnen samen spelen op hetzelfde toetsenbord.">
+    <meta name="keywords" content="pong, game, arcade, online, spel, twee spelers">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+        
+        #gameContainer {
+            text-align: center;
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        #gameCanvas {
+            border: 3px solid #00ff00;
+            background: #000;
+            box-shadow: 0 0 20px rgba(0,255,0,0.3);
+            max-width: 100%;
+            height: auto;
+        }
+        
+        #score {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #00ff00;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        
+        #instructions {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #ccc;
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        #gameOver {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 3px solid #00ff00;
+            border-radius: 10px;
+            display: none;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0,255,0,0.5);
+        }
+        
+        button {
+            background: #333;
+            color: white;
+            border: 2px solid #00ff00;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            margin-top: 15px;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #00ff00;
+            color: black;
+            transform: scale(1.05);
+        }
+        
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        @media (max-width: 850px) {
+            #gameCanvas {
+                width: 100%;
+                max-width: 400px;
+            }
+            
+            #instructions {
+                font-size: 14px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>🏓 PONG GAME 🏓</h1>
+        <div id="score">Speler 1: 0 | Speler 2: 0</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="instructions">
+            <h3>Hoe te spelen:</h3>
+            <p><strong>Speler 1 (links):</strong> W (omhoog) / S (omlaag)</p>
+            <p><strong>Speler 2 (rechts):</strong> Pijl omhoog / Pijl omlaag</p>
+            <p><strong>Spatie:</strong> Start spel / Pauzeer</p>
+            <p>Eerste speler die 10 punten scoort wint!</p>
+        </div>
+        
+        <div class="footer">
+            <p>Deel deze pagina met vrienden om samen te spelen!</p>
+        </div>
+        
+        <div id="gameOver">
+            <h2>🎉 Game Over! 🎉</h2>
+            <p id="winner"></p>
+            <button onclick="resetGame()">🔄 Nieuw Spel</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const winnerElement = document.getElementById('winner');
+
+        // Game state
+        let gameRunning = false;
+        let gameStarted = false;
+        
+        // Game objects
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            speedX: 5,
+            speedY: 3,
+            reset: function() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.speedX = (Math.random() > 0.5 ? 1 : -1) * 5;
+                this.speedY = (Math.random() > 0.5 ? 1 : -1) * 3;
+            }
+        };
+
+        const paddle1 = {
+            x: 10,
+            y: canvas.height / 2 - 50,
+            width: 10,
+            height: 100,
+            speed: 6
+        };
+
+        const paddle2 = {
+            x: canvas.width - 20,
+            y: canvas.height / 2 - 50,
+            width: 10,
+            height: 100,
+            speed: 6
+        };
+
+        let score1 = 0;
+        let score2 = 0;
+        const maxScore = 10;
+
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (!gameStarted) {
+                    startGame();
+                } else {
+                    togglePause();
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        function startGame() {
+            gameStarted = true;
+            gameRunning = true;
+            ball.reset();
+            gameLoop();
+        }
+
+        function togglePause() {
+            gameRunning = !gameRunning;
+            if (gameRunning) gameLoop();
+        }
+
+        function resetGame() {
+            gameStarted = false;
+            gameRunning = false;
+            score1 = 0;
+            score2 = 0;
+            ball.reset();
+            paddle1.y = canvas.height / 2 - 50;
+            paddle2.y = canvas.height / 2 - 50;
+            gameOverElement.style.display = 'none';
+            updateScore();
+            draw();
+        }
+
+        function updatePaddles() {
+            // Paddle 1 controls (W/S)
+            if (keys['w'] && paddle1.y > 0) {
+                paddle1.y -= paddle1.speed;
+            }
+            if (keys['s'] && paddle1.y < canvas.height - paddle1.height) {
+                paddle1.y += paddle1.speed;
+            }
+
+            // Paddle 2 controls (Arrow keys)
+            if (keys['arrowup'] && paddle2.y > 0) {
+                paddle2.y -= paddle2.speed;
+            }
+            if (keys['arrowdown'] && paddle2.y < canvas.height - paddle2.height) {
+                paddle2.y += paddle2.speed;
+            }
+        }
+
+        function updateBall() {
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // Ball collision with top and bottom walls
+            if (ball.y <= ball.radius || ball.y >= canvas.height - ball.radius) {
+                ball.speedY = -ball.speedY;
+            }
+
+            // Ball collision with paddle 1
+            if (ball.x <= paddle1.x + paddle1.width && 
+                ball.y >= paddle1.y && 
+                ball.y <= paddle1.y + paddle1.height &&
+                ball.speedX < 0) {
+                ball.speedX = -ball.speedX;
+                // Add some angle based on where the ball hits the paddle
+                let hitPos = (ball.y - paddle1.y) / paddle1.height;
+                ball.speedY = (hitPos - 0.5) * 8;
+            }
+
+            // Ball collision with paddle 2
+            if (ball.x >= paddle2.x && 
+                ball.y >= paddle2.y && 
+                ball.y <= paddle2.y + paddle2.height &&
+                ball.speedX > 0) {
+                ball.speedX = -ball.speedX;
+                // Add some angle based on where the ball hits the paddle
+                let hitPos = (ball.y - paddle2.y) / paddle2.height;
+                ball.speedY = (hitPos - 0.5) * 8;
+            }
+
+            // Ball goes out of bounds
+            if (ball.x < 0) {
+                score2++;
+                ball.reset();
+                updateScore();
+                if (score2 >= maxScore) {
+                    endGame('Speler 2');
+                }
+            }
+            if (ball.x > canvas.width) {
+                score1++;
+                ball.reset();
+                updateScore();
+                if (score1 >= maxScore) {
+                    endGame('Speler 1');
+                }
+            }
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `Speler 1: ${score1} | Speler 2: ${score2}`;
+        }
+
+        function endGame(winner) {
+            gameRunning = false;
+            winnerElement.textContent = `${winner} wint!`;
+            gameOverElement.style.display = 'block';
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw center line
+            ctx.strokeStyle = '#fff';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw paddles
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(paddle1.x, paddle1.y, paddle1.width, paddle1.height);
+            ctx.fillRect(paddle2.x, paddle2.y, paddle2.width, paddle2.height);
+
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw start message
+            if (!gameStarted) {
+                ctx.font = '24px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('Druk op SPATIE om te starten', canvas.width / 2, canvas.height / 2 + 50);
+            }
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            updatePaddles();
+            updateBall();
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        resetGame();
+    </script>
+</body>
+</html>d
